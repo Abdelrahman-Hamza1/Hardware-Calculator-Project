@@ -184,11 +184,12 @@ sub2		SUBWF	Result		; and subtract from result
 		
 	 ;;; Final Step: For every 10  In Ones, Increment Tens THEN for every 10 in Tens, Increment Hundreds
 
+
 OnesLoop
     MOVLW   D'10'       
-    SUBWF   Ones, W     ; Subtract 10 from Ones
-    BTFSC   STATUS, C   ; If carry is SET => Ones is 0-9 => GOTO (Re-Add 10 & Exit)
-    GOTO    OnesLoop_Exit   ; If Ones < 10, continue to OnesLoop_Continue
+    SUBWF   Ones,F     ; Subtract 10 from Ones
+    BTFSS   STATUS, C   ; If carry is SET => Ones is 0-9 => GOTO (Re-Add 10 & Exit)
+    GOTO    OnesLoop_Exit   
     INCF    Tens
     GOTO    OnesLoop    ; Go to Tens loop
 OnesLoop_Exit
@@ -196,15 +197,17 @@ OnesLoop_Exit
     ADDWF Ones, F
 
 TensLoop
+	
     MOVLW   D'10'     
-    SUBWF   Tens, W     
-    BTFSC   STATUS, C  
+    SUBWF   Tens, F    
+    BTFSS   STATUS, C  
     GOTO    TensLoop_Exit
     INCF Hunds 
     GOTO    TensLoop  
 TensLoop_Exit
     MOVLW D'10'
     ADDWF Tens, F
+
    
 
 
