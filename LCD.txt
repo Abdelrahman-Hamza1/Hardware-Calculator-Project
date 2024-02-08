@@ -1,0 +1,354 @@
+PROCESSOR 16F877A
+INCLUDE "P16F877A.INC"  
+
+__CONFIG 0x3731
+
+Char EQU 0x25
+BLINK EQU 0x26
+PrintCount EQU 0x27 ; Define a new register to keep track of print count
+FIRSTNUMBER EQU 0X28
+SECONDNUMBER EQU 0X29
+counter EQU 0X30
+Lsd EQU 0X31
+Msd EQU 0X32
+ORG 0x00
+GOTO init
+
+ORG 0x04
+GOTO ISR
+
+; The init for our program
+init:
+    MOVLW 0x00
+    MOVWF PrintCount ; Initialize print count to 0
+    
+    ;REMOVE THE FOLLOWING 4 LINES
+    BANKSEL PORTD
+    MOVLW 22 ; 34 IN DECIMAL
+    MOVWF FIRSTNUMBER
+    
+    MOVLW 22
+    MOVWF SECONDNUMBER
+
+
+    GOTO start
+
+; When interrupt happens the program will enter here
+ISR:
+
+    retfie
+
+INCLUDE "LCDIS_PORTD.INC" ; IF YOU WANT TO USE LCD ON PORT D
+
+; The main code for our program
+start:
+    outerCounter EQU 0x30 ; Define file registers for the counters
+    innerCounter EQU 0x31
+    CALL xms
+    CALL xms
+    CALL inid
+
+loop:
+    MOVF PrintCount, W ; Move print count to W register
+    SUBLW 3 ; Subtract 3 from the W register
+    BTFSS STATUS, Z ; Check if result is zero (means printed 3 times)
+    GOTO printMessage ; If not printed 3 times, go to print
+    CALL print1
+    CALL FNUM
+    CALL clearFirstLine
+    CALL SNUM
+    GOTO endLoop ; If printed 3 times, skip printing
+    
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+printMessage:
+    ; DISPLAY THE SENTENCE 'WELCOME MULTIPLICATION ' ON THE LCD
+   
+   MOVLW 'W'
+   BSF Select, RS
+   CALL send
+   MOVLW 'E'
+   CALL send
+   MOVLW 'L'
+   CALL send
+   MOVLW 'C'
+   CALL send
+   MOVLW 'O'
+   call send
+   MOVLW 'M'
+   call send
+   MOVLW 'E'
+   call send
+   
+   
+   BCF Select, RS
+   MOVLW	0xC0	; DDRAM address for the second line
+   CALL	send		; and send command
+   
+   BSF Select, RS
+    MOVLW 'M'
+    call send
+    MOVLW 'U'
+    call send
+    MOVLW 'L'
+    call send
+    MOVLW 'T'
+    call send
+    MOVLW 'I'
+    call send
+    MOVLW 'P'
+    call send
+    MOVLW 'L'
+    call send
+    MOVLW 'I'
+    call send
+    MOVLW 'C'
+    call send
+    MOVLW 'A'
+    call send
+    MOVLW 'T'
+    call send
+    MOVLW 'I'
+    call send
+    MOVLW 'O'
+    call send
+    MOVLW 'N'
+    call send
+
+    INCF PrintCount, F ; Increment the print count
+    
+    CALL Delay1Sec ; Delay for a second
+    
+    BCF Select, RS 
+    MOVLW	0x01		; Code to clear display
+    CALL	send		; and send code
+
+GOTO   loop
+endLoop:
+  
+
+    GOTO endLoop ; Go back to loop
+
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.
+print1:
+   BCF Select, RS
+   MOVLW	0x80	; DDRAM address for the first position of the first line
+   CALL	send	; and send command
+
+    BSF Select, RS
+    MOVLW 'N'
+    call send
+    
+    MOVLW 'U'
+    call send
+    
+    MOVLW 'M'
+    call send
+    
+    MOVLW 'B'
+    call send
+    
+   
+    MOVLW 'E'
+    call send
+    
+      
+    MOVLW 'R'
+    call send
+    
+      
+    MOVLW '1'
+    call send
+
+
+RETURN          
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>    
+FNUM:
+   BANKSEL PORTD
+   BCF Select, RS
+   MOVLW	0xC0	; DDRAM address for the second line
+   CALL	send		; and send command
+  
+   ; Initial setup
+outres	MOVF	FIRSTNUMBER,W	; load result
+	MOVWF	Lsd		; into low digit store
+	CLRF	Msd		; high digit = 0
+	BANKSEL STATUS
+	BSF	STATUS,C	; set C flag
+	BANKSEL PORTD
+	MOVLW	D'10'		; load 10
+
+again	SUBWF	Lsd		; sub 10 from result
+	INCF	Msd		; inc high digit
+	BANKSEL STATUS
+	BTFSC	STATUS,C	; check if negative
+	GOTO	again		; no, keep going
+	BANKSEL PORTD
+	ADDWF	Lsd		; yes, add 10 back 
+	DECF	Msd		; 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; display 2 digit BCD result ..............................
+	BANKSEL PORTD
+	MOVF	Msd,W		; load high digit result
+	BANKSEL STATUS
+	BTFSC	STATUS,Z	; check if Z
+	GOTO	lowd		; yes, dont display Msd
+      BANKSEL PORTD
+	ADDLW	030		; convert to ASCII
+	BSF	Select,RS	; Select data mode
+	CALL	send		; and send Msd
+BANKSEL PORTD
+lowd	MOVF	Lsd,W		; load low digit result
+	ADDLW	030		; convert to ASCII
+	BANKSEL PORTD
+	BSF	Select,RS	; Select data mode
+	CALL	send		; and send Msd
+
+    
+    MOVLW 'X'
+    CALL send
+
+RETURN
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+SNUM:
+    BANKSEL PORTD
+    BCF Select, RS
+    MOVLW	0x80	; DDRAM address for the first position of the first line
+    CALL	send	; and send command
+   
+    BSF Select, RS
+    MOVLW 'N'
+    call send
+    
+    MOVLW 'U'
+    call send
+    
+    MOVLW 'M'
+    call send
+    
+    MOVLW 'B'
+    call send
+    
+   
+    MOVLW 'E'
+    call send
+    
+      
+    MOVLW 'R'
+    call send
+    
+      
+    MOVLW '2'
+    call send
+    
+    NOP
+    NOP
+
+    
+   BANKSEL PORTD
+   BCF Select, RS
+   MOVLW	0xC0	; DDRAM address for the second line
+   CALL	send		; and send command
+   
+    ;PRINT THE VALUE OF THE SECOND NUMBER
+    ; Set the cursor to the second line, fourth position
+      
+      BCF Select, RS        ; Command mode
+      MOVLW   0x14  
+      CALL    send         
+      MOVLW   0x14   
+      CALL    send     
+      MOVLW   0x14   
+      CALL    send  
+      
+     ; Initial setup
+outres2	MOVF	SECONDNUMBER,W	; load result
+	MOVWF	Lsd		; into low digit store
+	CLRF	Msd		; high digit = 0
+	BANKSEL STATUS
+	BSF	STATUS,C	; set C flag
+	BANKSEL PORTD
+	MOVLW	D'10'		; load 10
+
+again2	SUBWF	Lsd		; sub 10 from result
+	INCF	Msd		; inc high digit
+	BANKSEL STATUS
+	BTFSC	STATUS,C	; check if negative
+	GOTO	again2		; no, keep going
+	BANKSEL PORTD
+	ADDWF	Lsd		; yes, add 10 back 
+	DECF	Msd		; 
+	
+	
+; display 2 digit BCD result ..............................
+	BANKSEL PORTD
+	MOVF	Msd,W		; load high digit result
+	BANKSEL STATUS
+	BTFSC	STATUS,Z	; check if Z
+	GOTO	lowd2		; yes, dont display Msd
+      BANKSEL PORTD
+	ADDLW	030		; convert to ASCII
+	BSF	Select,RS	; Select data mode
+	CALL	send		; and send Msd
+BANKSEL PORTD
+lowd2	MOVF	Lsd,W		; load low digit result
+	ADDLW	030		; convert to ASCII
+	BANKSEL PORTD
+	BSF	Select,RS	; Select data mode
+	CALL	send		; and send Msd
+
+      
+      
+      
+      
+      
+      MOVLW '='
+      CALL send
+      
+      MOVLW '4'
+      call send
+       MOVLW '4'
+      call send
+       MOVLW '4'
+      call send
+    
+RETURN
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+; Clear the first line of the LCD
+clearFirstLine:
+    BANKSEL PORTD
+    BCF Select, RS         ; Command mode
+    MOVLW   0x80           ; DDRAM address for the first position of the first line
+    CALL    send           ; Set cursor to the start of the first line
+    
+    BSF Select, RS         ; Data mode to write characters
+    MOVLW   16             ; Number of characters in the first line
+    MOVWF   counter        ; Initialize loop counter
+
+clearLoop:
+    MOVLW   ' '            ; ASCII code for space
+    CALL    send           ; Write space to current cursor position
+    DECFSZ  counter, F     ; Decrement counter and skip next line if zero
+    GOTO    clearLoop      ; Repeat until all positions are filled with spaces
+
+    RETURN
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Delay1Sec:
+        MOVLW   D'250'       ; Outer loop counter 250 times
+        MOVWF   outerCounter ; Move to outer loop counter register
+
+    OuterLoop:
+        MOVLW   D'250'       ; Inner loop counter 250 times
+        MOVWF   innerCounter ; Move to inner loop counter register
+
+    InnerLoop:
+        DECFSZ  innerCounter, F ; Decrement inner loop counter
+        GOTO    InnerLoop       ; Continue inner loop if not zero
+
+        DECFSZ  outerCounter, F ; Decrement outer loop counter
+        GOTO    OuterLoop       ; Continue outer loop if not zero
+
+RETURN
+;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+END
