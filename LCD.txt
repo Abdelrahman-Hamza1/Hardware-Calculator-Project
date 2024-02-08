@@ -11,6 +11,7 @@ SECONDNUMBER EQU 0X29
 counter EQU 0X30
 Lsd EQU 0X31
 Msd EQU 0X32
+; The instructions should start from here
 ORG 0x00
 GOTO init
 
@@ -31,16 +32,22 @@ init:
     MOVWF SECONDNUMBER
 
 
+
+    BANKSEL TRISD
+    CLRF TRISD
+    BANKSEL PORTD
+
     GOTO start
 
 ; When interrupt happens the program will enter here
 ISR:
 
+
+    BANKSEL PORTD
     retfie
 
 INCLUDE "LCDIS_PORTD.INC" ; IF YOU WANT TO USE LCD ON PORT D
 
-; The main code for our program
 start:
     outerCounter EQU 0x30 ; Define file registers for the counters
     innerCounter EQU 0x31
@@ -64,6 +71,7 @@ printMessage:
     ; DISPLAY THE SENTENCE 'WELCOME MULTIPLICATION ' ON THE LCD
    
    MOVLW 'W'
+   ;MOVFW Char
    BSF Select, RS
    CALL send
    MOVLW 'E'
@@ -168,7 +176,6 @@ FNUM:
    BCF Select, RS
    MOVLW	0xC0	; DDRAM address for the second line
    CALL	send		; and send command
-  
    ; Initial setup
 outres	MOVF	FIRSTNUMBER,W	; load result
 	MOVWF	Lsd		; into low digit store
@@ -185,10 +192,11 @@ again	SUBWF	Lsd		; sub 10 from result
 	GOTO	again		; no, keep going
 	BANKSEL PORTD
 	ADDWF	Lsd		; yes, add 10 back 
-	DECF	Msd		; 
+	DECF	Msd		; inc high digit
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; display 2 digit BCD result ..............................
+   
+   ; display 2 digit BCD result ..............................
 	BANKSEL PORTD
 	MOVF	Msd,W		; load high digit result
 	BANKSEL STATUS
@@ -255,7 +263,7 @@ SNUM:
     ; Set the cursor to the second line, fourth position
       
       BCF Select, RS        ; Command mode
-      MOVLW   0x14  
+      MOVLW   0x14   
       CALL    send         
       MOVLW   0x14   
       CALL    send     
@@ -278,7 +286,7 @@ again2	SUBWF	Lsd		; sub 10 from result
 	GOTO	again2		; no, keep going
 	BANKSEL PORTD
 	ADDWF	Lsd		; yes, add 10 back 
-	DECF	Msd		; 
+	DECF	Msd		; inc high digit
 	
 	
 ; display 2 digit BCD result ..............................
@@ -351,4 +359,8 @@ Delay1Sec:
 
 RETURN
 ;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
 END
