@@ -17,8 +17,7 @@
 ;====================================================================
 NumberOne EQU 0x20
 NumberTwo EQU 0x30
-Result_High EQU 0x40
-Result_Low EQU 0x50
+Result EQU 0x40
 Temp EQU 0x60
 Hunds EQU 0x70
 Tens EQU 0x71
@@ -108,96 +107,116 @@ Done
       CLRF PORTC
      
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Work On Multiplication Here (Change From Addition To Mul) ;;;;;;;;;;;;;;;;
+      ;;;;;;;;; NumberOne (00-99)
+      ;;;;;;;; NumberTwo (0-9)
+      ;;;;;;;;; Multiply & Put Hundreds, Tens & Units into Hunds, Tens & Ones
       BANKSEL PORTA
       CLRF Temp
-      CLRF Result_High
-      CLRF Result_Low
-
-L1
-      MOVF Temp, W
-      ADDWF NumberTwo, W 	  ;; 255 + 5 -> CARRY = 1!!!!
-      BTFSC STATUS, C  		 ;; if carry clear -> skip incrementing the HIGH register
-      INCF Result_High, F
-      DECF NumberOne, F 	; Decrement the first number (Loop variable)
+      CLRF Result
+      CLRF Hunds
+      CLRF Tens
+      CLRF Ones
+      ;;; APPROACH: Do a multiplication (summing Loop) & every iteration, check if the reesult is over a 100, if it is, subtract 100 & increment hunds
       
-      MOVWF Temp	; Store Temp back for now  (Old temp + NumberTwo)
-   
-      MOVF NumberOne, W
-      XORLW 0x00       
-      BTFSC STATUS, Z 
+L1
+      MOVF Result, W
+      ADDWF NumberOne, W ;;; Add 0-99 to W
+      BTFSS STATUS, C 	;;;;; If carry is clear -> GOTO (Skip Incrementations)
+      GOTO DontIncrement
+      INCF Hunds 	;;; If Carry is SET (Skipped GOTO) -> Add 2 to hundreds, 5 to Tens, 6 to Ones.
+      INCF Hunds
+      
+      INCF Tens
+      INCF Tens
+      INCF Tens
+      INCF Tens
+      INCF Tens
+      
+      INCF Ones
+      INCF Ones
+      INCF Ones
+      INCF Ones 
+      INCF Ones
+      INCF Ones
+DontIncrement
+
+      MOVWF Result ;;; store current multiplication result
+      DECF NumberTwo, F
+      MOVF NumberTwo, W
+      XORLW 0x00
+      BTFSC STATUS, Z
       GOTO EndMul
       GOTO L1
       
-EndMul
-      MOVF Temp, W
-      MOVWF Result_Low
-      
-      
-      MOVF Result_High,W ;; 0000_00_0(PB1)_1(PB0)
-      MOVWF PORTB
-      
-      MOVF Result_Low, W
+EndMul      
+      MOVF Result, W
       MOVWF PORTD
       
-      ;;;;;;;;; Next -> Transform Result_High & Result_Low to Hundreds, Tens & Digits Count. ca
-      ;;;;;;;;; Code to transform 1 register to Hundreds, Tens & Digits already Exists in VINTEST project provided by Dr. Hanna
-      ;;;;;;;; We only need to transform the Result_High & Could use Dr. Hanna's code to transform Result_Low
-      
-      MOVF Result_High, W     
-      XORLW 0x00       
-      BTFSS STATUS, Z  
-      GOTO Test1
-      GOTO ifDone ;;; Is result High is ZERO -> Do nothing and go to ifDone (No Increments or anything)
-     
-    ; Check if REG == 1
-Test1     
-      MOVF Result_High, W 
-      XORLW 0x01       
-      BTFSS STATUS, Z  
-      GOTO Test2
-      MOVLW d'2'
-      MOVWF Hunds
-      MOVLW d'5'
-      MOVWF Tens
-      MOVLW d'6'
-      MOVWF Ones
-      GOTO ifDone
-    
-    ; Check if REG == 2
-Test2
-      MOVF Result_High, W  
-      XORLW 0x02
-      BTFSS STATUS, Z 
-      GOTO Test3
-      MOVLW d'5'
-      MOVWF Hunds
-      MOVLW d'1'
-      MOVWF Tens
-      MOVLW d'2'
-      MOVWF Ones
-      GOTO ifDone
-    
-    ; Check if REG == 3
-Test3
-      MOVF Result_High, W 
-      XORLW 0x03       
-      BTFSS STATUS, Z  
-      GOTO ifDone
-      MOVLW d'7'
-      MOVWF Hunds
-      MOVLW d'6'
-      MOVWF Tens
-      MOVLW d'8'
-      MOVWF Ones
-ifDone
+      ;;; ATP Result has the result of multiplication without considering overflows
+      ;;; -> extract Hundreds, Tens & Ones from a 0-255 Number & Add em onto correct register
+      ;;; Dr. Hanna Code
+; Calclulate hundreds......................................
 
-      ;;MOVF Hunds, W
-      ;;MOVWF PORTD
-      
-      ;MOVF NumberOne, W 
-      ;ADDWF NumberTwo, W
+		BSF		STATUS,C	; set carry for subtract
+		MOVLW	D'100'		; load 100
+sub1		SUBWF	Result,1		; and subtract from result
+		INCF	Hunds		; count number of loops
+		BTFSC	STATUS,C	; and check if done
+		GOTO	sub1		; no, carry on
+
+		ADDWF	Result,1		; yes, add 100 back on
+		DECF	Hunds		; and correct loop count
+
+; Calculate tens digit.....................................
+
+		BSF		STATUS,C	; repeat process for tens
+		MOVLW	D'10'		; load 10
+sub2		SUBWF	Result		; and subtract from result
+		INCF	Tens		; count number of loops
+		BTFSC	STATUS,C	; and check if done
+		GOTO	sub2		; no, carry on
+
+		ADDWF	Result		; yes, add 100 back on
+		DECF	Tens		; and correct loop count
+		MOVF	Result,W		; load remainder
+		ADDWF	Ones,F		; and store as ones digit
+		
+		
+	 ;;; Final Step: For every 10  In Ones, Increment Tens THEN for every 10 in Tens, Increment Hundreds
+
+OnesLoop
+    MOVLW   D'10'       
+    SUBWF   Ones, W     ; Subtract 10 from Ones
+    BTFSC   STATUS, C   ; If carry is SET => Ones is 0-9 => GOTO (Re-Add 10 & Exit)
+    GOTO    OnesLoop_Exit   ; If Ones < 10, continue to OnesLoop_Continue
+    INCF    Tens
+    GOTO    OnesLoop    ; Go to Tens loop
+OnesLoop_Exit
+    MOVLW D'10'
+    ADDWF Ones, F
+
+TensLoop
+    MOVLW   D'10'     
+    SUBWF   Tens, W     
+    BTFSC   STATUS, C  
+    GOTO    TensLoop_Exit
+    INCF Hunds 
+    GOTO    TensLoop  
+TensLoop_Exit
+    MOVLW D'10'
+    ADDWF Tens, F
+   
+
+
+	 
+	    
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-      MOVWF PORTC
+     
+      
+      MOVF  Ones, W
+      MOVWF PORTD		;; Hunds on PORTD of co-proccessor
+      MOVF Tens, W
+      MOVWF PORTC		;; Tens on PORTD of Main CPU
       BSF PORTC, 7   
 
 ENDLESSLOOP
