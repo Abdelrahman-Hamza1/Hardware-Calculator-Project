@@ -15,15 +15,15 @@
 ;====================================================================
 ; VARIABLES
 ;====================================================================
-HundredsOne EQU 0X20 
-DigitsOne EQU 0X60
-HundredsTwo EQU 0x40 
-DigitsTwo EQU 0x50
-
-FLAGS EQU 0X32 
-TimerCounter EQU 0x30 
-
-NumHolder EQU 0x70
+TensOne EQU 0X20 
+UnitsOne EQU 0X21
+TensTwo EQU 0x22
+UnitsTwo EQU 0x23
+FLAGS EQU 0X24
+TimerCounter EQU 0x25 
+counter EQU 0X26
+outerCounter EQU 0x27 
+innerCounter EQU 0x28
 ;====================================================================
 ; RESET and INTERRUPT VECTORS
 ;====================================================================
@@ -40,19 +40,18 @@ ISR   code 0x04
       GOTO TimerInterrupt 
    
       BANKSEL PORTD
+      BSF PORTD, 0
      MOVF FLAGS, W     
      XORLW 0x00       
      BTFSS STATUS, Z  
      GOTO Test1
-     INCF HundredsOne,F 
-     MOVF HundredsOne, W 
-     MOVWF PORTD
+     INCF TensOne,F 
+     MOVF TensOne, W 
      XORLW 0x0A ;; CHECK IF EQUAL TO 10 -> CHANGE TO 0 
      BTFSS STATUS, Z
      GOTO ifDone
-     CLRF HundredsOne
-     MOVF HundredsOne, W
-     MOVWF PORTD 
+     CLRF TensOne
+     MOVF TensOne, W
      GOTO ifDone
     
     ; Check if REG == 1
@@ -61,15 +60,13 @@ Test1
      XORLW 0x01       
      BTFSS STATUS, Z  
      GOTO Test2
-     INCF DigitsOne,F 
-     MOVF DigitsOne, W 
-     MOVWF PORTD
+     INCF UnitsOne,F 
+     MOVF UnitsOne, W 
      XORLW 0x0A ;; CHECK IF EQUAL TO 10 -> CHANGE TO 0 
      BTFSS STATUS, Z
      GOTO ifDone
-     CLRF DigitsOne
-     MOVF DigitsOne, W
-     MOVWF PORTD 
+     CLRF UnitsOne
+     MOVF UnitsOne, W
      GOTO ifDone
     
     ; Check if REG == 2
@@ -78,15 +75,13 @@ Test2
      XORLW 0x02
      BTFSS STATUS, Z 
      GOTO Test3
-     INCF HundredsTwo,F 
-     MOVF HundredsTwo, W 
-     MOVWF PORTD
+     INCF TensTwo,F 
+     MOVF TensTwo, W 
      XORLW 0x0A ;; CHECK IF EQUAL TO 10 -> CHANGE TO 0 
      BTFSS STATUS, Z
      GOTO ifDone
-     CLRF HundredsTwo
-     MOVF HundredsTwo, W
-     MOVWF PORTD  
+     CLRF TensTwo
+     MOVF TensTwo, W
      GOTO ifDone
     
     ; Check if REG == 3
@@ -95,15 +90,13 @@ Test3
      XORLW 0x03       
      BTFSS STATUS, Z  
      GOTO ifDone
-     INCF DigitsTwo,F    
-     MOVF DigitsTwo, W 
-     MOVWF PORTD 
+     INCF UnitsTwo,F    
+     MOVF UnitsTwo, W 
       XORLW 0x0A ;; CHECK IF EQUAL TO 10 -> CHANGE TO 0 
      BTFSS STATUS, Z
      GOTO ifDone
-     CLRF DigitsTwo
-     MOVF DigitsTwo, W
-     MOVWF PORTD 
+     CLRF UnitsTwo
+     MOVF UnitsTwo, W
      
 ifDone
       CLRF TimerCounter
@@ -125,7 +118,6 @@ TimerInterrupt
       BANKSEL PORTD
       INCF FLAGS, F
       MOVF FLAGS, W 
-      MOVWF PORTD 
       
       ;INCF PORTD, F
      
@@ -141,7 +133,9 @@ endInt
       BANKSEL PORTB
       movf PORTB, F	; Read PortB (to itself) to end mismatch condition
       RETFIE     
+   
 
+INCLUDE "LCDIS_PORTD.INC" 
 ;====================================================================
 ; CODE SEGMENT
 ;====================================================================
@@ -163,6 +157,8 @@ Start
       BSF INTCON, GIE 
       BSF INTCON, PEIE 
       BSF INTCON, INTE
+
+      
       
       BANKSEL T1CON
       BSF T1CON, T1CKPS1
@@ -175,14 +171,27 @@ Start
       BANKSEL PORTD
       MOVLW 0x00
       MOVWF PORTD
+      CLRF TensOne
+      CLRF UnitsOne
       
       
+      CALL xms
+      CALL xms
+      CALL inid
+    
       ; Code Here!
+      CALL printMessage
+      CALL printMessage
+      CALL printMessage
       
-      ;;; LCD TASK FIRST -----> Could Disable Push Button Interrupts While Doing this to avoid the clicks actually doing anything
-      ;;;;;;;;;;;;;;;;;;;;;;;;; But even if the user clicks the button while the LCD is printing, it will only afffect the First Numbers' Hundreds Digit
-      ;;;;;;;;;;;;;;;;;;;;;;;;  And would not move to other digits because timer is still off.
+      CALL print1 ;; 2nd line 00 -> INTERRUPT & Change 
       
+      CALL printNumberOne
+      
+
+     
+      
+
       BANKSEL T1CON
       BSF T1CON, TMR1ON ; Get Timer Started!
       
@@ -195,6 +204,7 @@ Loop
       
       
 Number2      
+      CALL printNumberOne
       NOP 
       BANKSEL T1CON
       BCF T1CON, TMR1ON ;; Disable timer & do LCD Work
@@ -227,30 +237,30 @@ Communication
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
       ;;; START Sending DATA to co-processor ;;;;;;;;;;;;;;;;;;;;;;;;;;;
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-      ;;;; Multiply HundredsOne by 10 & Add DigitsOne to it , that will be our first number;;;;;;;
+      ;;;; Multiply TensOne by 10 & Add UnitsOne to it , that will be our first number;;;;;;;
       ;;;; We will send it and make sure that our MSB is set to 1 (0-99 Number can be reperesnted in 7 Bits thus the MSB is free-use)
-      ;;;; We will give a small delay for the co-proccessor to read the value then we will send the DigitsTwo Number Through (MSB = 1 Aswell)
+      ;;;; We will give a small delay for the co-proccessor to read the value then we will send the UnitsTwo Number Through (MSB = 1 Aswell)
       ;;;; Then Do a quick multiplication & then switch PORTC to OUTPUTS VIA TRISC & LISTEN UNTIL THE BUS CHANGES. 
       ;;;; Add Both Results then Send to LCD.	
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 00-99 -> 7 bits --- PORTC 8 bits -> PC7 will be used for Synchronization
       
       CLRW 
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
       
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
-      ADDWF HundredsOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
+      ADDWF TensOne, W
       
-      ADDWF DigitsOne, W ;; Number One now in W
+      ADDWF UnitsOne, W ;; Number One now in W
       
-      MOVWF PORTD
+      
       
       MOVWF PORTC 
       BSF PORTC, 7  ;; Set Last Bit to Notify co-processor ab number rcved
@@ -260,7 +270,7 @@ Communication
       NOP
       NOP
       
-      MOVF  DigitsTwo, W ;; send unit of number #2
+      MOVF  UnitsTwo, W ;; send unit of number #2
       MOVWF PORTC 
       BCF PORTC, 7 
       
@@ -284,13 +294,152 @@ LoopRCV
 
 RCVD
       MOVF PORTC, W 
-      MOVWF PORTD
       BCF PORTD, 7
       GOTO endLoop
       ;; next 2 lines will be skipped for now.
       BANKSEL PORTD
-      MOVF DigitsTwo,W
+      MOVF UnitsTwo,W
 endLoop      
        GOTO endLoop
 ;====================================================================
+
+printMessage:
+   MOVLW 'W'
+   BSF Select, RS
+   CALL send
+   MOVLW 'E'
+   CALL send
+   MOVLW 'L'
+   CALL send
+   MOVLW 'C'
+   CALL send
+   MOVLW 'O'
+   call send
+   MOVLW 'M'
+   call send
+   MOVLW 'E'
+   call send
+   
+   
+   BCF Select, RS
+   MOVLW	0xC0	; DDRAM address for the second line
+   CALL	send		; and send command
+   
+   BSF Select, RS
+    MOVLW 'M'
+    call send
+    MOVLW 'U'
+    call send
+    MOVLW 'L'
+    call send
+    MOVLW 'T'
+    call send
+    MOVLW 'I'
+    call send
+    MOVLW 'P'
+    call send
+    MOVLW 'L'
+    call send
+    MOVLW 'I'
+    call send
+    MOVLW 'C'
+    call send
+    MOVLW 'A'
+    call send
+    MOVLW 'T'
+    call send
+    MOVLW 'I'
+    call send
+    MOVLW 'O'
+    call send
+    MOVLW 'N'
+    call send
+    
+    
+    CALL Delay1Sec
+    CALL Delay1Sec
+    CALL Delay1Sec
+    CALL Delay1Sec
+    
+    BCF Select, RS 
+    MOVLW	0x01		; Code to clear display
+    CALL	send		; and send code
+    
+    RETURN
+    
+;=====================================================================\
+Delay1Sec:
+        MOVLW   D'250'       ; Outer loop counter 250 times
+        MOVWF   outerCounter ; Move to outer loop counter register
+
+    OuterLoop:
+        MOVLW   D'250'       ; Inner loop counter 250 times
+        MOVWF   innerCounter ; Move to inner loop counter register
+
+    InnerLoop:
+        DECFSZ  innerCounter, F ; Decrement inner loop counter
+        GOTO    InnerLoop       ; Continue inner loop if not zero
+
+        DECFSZ  outerCounter, F ; Decrement outer loop counter
+        GOTO    OuterLoop       ; Continue outer loop if not zero
+
+RETURN
+;=====================================================================
+print1:
+   BCF Select, RS
+   MOVLW	0x80	; DDRAM address for the first position of the first line
+   CALL	send	; and send command
+
+    BSF Select, RS
+    MOVLW 'N'
+    call send
+    
+    MOVLW 'U'
+    call send
+    
+    MOVLW 'M'
+    call send
+    
+    MOVLW 'B'
+    call send
+    
+   
+    MOVLW 'E'
+    call send
+    
+      
+    MOVLW 'R'
+    call send
+    
+      
+    MOVLW '1'
+    call send
+
+
+RETURN   
+
+;=====================================================================
+printNumberOne
+	 ;; go to start of line 2
+	 BANKSEL PORTD
+	BCF Select, RS
+	MOVLW	0xC0
+	CALL	send
+	
+	MOVF	TensOne,W		; load high digit result	
+	ADDLW	030		; convert to ASCII
+	BSF	Select,RS	; Select data mode
+	CALL	send		; and send Msd
+
+	MOVF	UnitsOne,W		; load low digit result
+	ADDLW	030		; convert to ASCII
+	BSF	Select,RS	; Select data mode
+	CALL	send		; and send Msd
+	
+	BCF Select, RS
+	 MOVLW	0x80	; DDRAM address for the first position of the first line
+	 CALL	send	; and send command
+
+RETURN
+;=====================================================================
       END
