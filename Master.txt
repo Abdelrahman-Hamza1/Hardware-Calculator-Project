@@ -43,6 +43,7 @@ NumHolder EQU 0x38
 outerCounter EQU 0x39 ; Define file registers for the counters
 innerCounter EQU 0x40
 counter EQU 0X41
+skipFlags EQU 0x42
 ;====================================================================
 ; RESET and INTERRUPT VECTORS
 ;====================================================================
@@ -175,6 +176,7 @@ Start
       ;; Initializations Here!
       BANKSEL TRISD 
       CLRF TRISD 
+      CLRF INTCON
       
       BANKSEL TRISC 
       CLRF TRISC 
@@ -235,6 +237,7 @@ Start
      NOP
       ; Code Here!
       
+      BTFSC skipFlags, 0
       GOTO SKIP
       CALL printMessage
       CALL printMessage
@@ -248,7 +251,7 @@ SKIP:
       
       
       
-
+      BCF INTCON, INTF
       BSF INTCON, INTE
       
 
@@ -553,8 +556,9 @@ HundsLoop_Exit
     ; call function to display result
     CALL DisplayResult
     
+    BSF skipFlags, 0
+    
 restart:
-
     BTFSS PORTB,0
     GOTO Start
     GOTO restart
